@@ -10,7 +10,7 @@ export default async function CustomerChatListPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/login");
 
-  const threads = listThreadsByCustomer(session.sub);
+  const threads = await listThreadsByCustomer(session.sub);
 
   return (
     <div>

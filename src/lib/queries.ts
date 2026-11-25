@@ -1,4 +1,4 @@
-import { db, newId } from "./db";
+import { db, newId, withTransaction } from "./db";
 
 export type Business = {
   id: string;
@@ -100,29 +100,33 @@ export type Stay = {
 export type Notice = { id: string; businessId: string; title: string; body: string; createdAt: string };
 
 // ---------- Business ----------
-export function createBusiness(data: Omit<Business, "id" | "createdAt">): Business {
+export async function createBusiness(data: Omit<Business, "id" | "createdAt">): Promise<Business> {
   const id = newId("biz");
-  db.prepare(
-    `INSERT INTO businesses (id, name, email, passwordHash, district, address, phone, description, heroColor, categories, openTime, closeTime, rating, reviewCount)
-     VALUES (@id, @name, @email, @passwordHash, @district, @address, @phone, @description, @heroColor, @categories, @openTime, @closeTime, @rating, @reviewCount)`
-  ).run({ id, ...data });
-  return getBusinessById(id)!;
+  const createdAt = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO businesses (id, name, email, password_hash, district, address, phone, description, hero_color, categories, open_time, close_time, rating, review_count, created_at)
+       VALUES (@id, @name, @email, @passwordHash, @district, @address, @phone, @description, @heroColor, @categories, @openTime, @closeTime, @rating, @reviewCount, @createdAt)`
+    )
+    .run({ id, createdAt, ...data });
+  return (await getBusinessById(id))!;
 }
 
-export function getBusinessByEmail(email: string): Business | undefined {
-  return db.prepare(`SELECT * FROM businesses WHERE email = ?`).get(email) as Business | undefined;
+export async function getBusinessByEmail(email: string): Promise<Business | undefined> {
+  return db.prepare(`SELECT * FROM businesses WHERE email = ?`).get(email);
 }
 
-export function getBusinessById(id: string): Business | undefined {
-  return db.prepare(`SELECT * FROM businesses WHERE id = ?`).get(id) as Business | undefined;
+export async function getBusinessById(id: string): Promise<Business | undefined> {
+  return db.prepare(`SELECT * FROM businesses WHERE id = ?`).get(id);
 }
 
-export function listBusinesses(): Business[] {
-  return db.prepare(`SELECT * FROM businesses ORDER BY createdAt DESC`).all() as Business[];
+export async function listBusinesses(): Promise<Business[]> {
+  return db.prepare(`SELECT * FROM businesses ORDER BY created_at DESC`).all();
 }
 
-export function listBusinessesByCategory(categoryCode: string): Business[] {
-  return listBusinesses().filter((b) =>
+export async function listBusinessesByCategory(categoryCode: string): Promise<Business[]> {
+  const all = await listBusinesses();
+  return all.filter((b) =>
     b.categories
       .split(",")
       .map((c) => c.trim())
@@ -130,87 +134,93 @@ export function listBusinessesByCategory(categoryCode: string): Business[] {
   );
 }
 
-export function listServicesByBusiness(businessId: string): ServiceMenu[] {
+export async function listServicesByBusiness(businessId: string): Promise<ServiceMenu[]> {
   return db
-    .prepare(`SELECT * FROM service_menus WHERE businessId = ? ORDER BY sortOrder ASC, price ASC`)
-    .all(businessId) as ServiceMenu[];
+    .prepare(`SELECT * FROM service_menus WHERE business_id = ? ORDER BY sort_order ASC, price ASC`)
+    .all(businessId);
 }
 
-export function getServiceById(id: string): ServiceMenu | undefined {
-  return db.prepare(`SELECT * FROM service_menus WHERE id = ?`).get(id) as ServiceMenu | undefined;
+export async function getServiceById(id: string): Promise<ServiceMenu | undefined> {
+  return db.prepare(`SELECT * FROM service_menus WHERE id = ?`).get(id);
 }
 
-export function createServiceMenu(data: Omit<ServiceMenu, "id">): ServiceMenu {
+export async function createServiceMenu(data: Omit<ServiceMenu, "id">): Promise<ServiceMenu> {
   const id = newId("svc");
-  db.prepare(
-    `INSERT INTO service_menus (id, businessId, name, description, price, durationMin, category, sortOrder)
-     VALUES (@id, @businessId, @name, @description, @price, @durationMin, @category, @sortOrder)`
-  ).run({ id, ...data });
-  return getServiceById(id)!;
+  await db
+    .prepare(
+      `INSERT INTO service_menus (id, business_id, name, description, price, duration_min, category, sort_order)
+       VALUES (@id, @businessId, @name, @description, @price, @durationMin, @category, @sortOrder)`
+    )
+    .run({ id, ...data });
+  return (await getServiceById(id))!;
 }
 
-export function listOptionsByBusiness(businessId: string): ServiceOption[] {
-  return db.prepare(`SELECT * FROM service_options WHERE businessId = ?`).all(businessId) as ServiceOption[];
+export async function listOptionsByBusiness(businessId: string): Promise<ServiceOption[]> {
+  return db.prepare(`SELECT * FROM service_options WHERE business_id = ?`).all(businessId);
 }
 
-export function createServiceOption(data: Omit<ServiceOption, "id">): ServiceOption {
+export async function createServiceOption(data: Omit<ServiceOption, "id">): Promise<ServiceOption> {
   const id = newId("opt");
-  db.prepare(`INSERT INTO service_options (id, businessId, name, price) VALUES (@id, @businessId, @name, @price)`).run({
-    id,
-    ...data,
-  });
-  return db.prepare(`SELECT * FROM service_options WHERE id = ?`).get(id) as ServiceOption;
+  await db
+    .prepare(`INSERT INTO service_options (id, business_id, name, price) VALUES (@id, @businessId, @name, @price)`)
+    .run({ id, ...data });
+  return db.prepare(`SELECT * FROM service_options WHERE id = ?`).get(id);
 }
 
-export function listNoticesByBusiness(businessId: string): Notice[] {
-  return db.prepare(`SELECT * FROM notices WHERE businessId = ? ORDER BY createdAt DESC`).all(businessId) as Notice[];
+export async function listNoticesByBusiness(businessId: string): Promise<Notice[]> {
+  return db.prepare(`SELECT * FROM notices WHERE business_id = ? ORDER BY created_at DESC`).all(businessId);
 }
 
-export function createNotice(data: Omit<Notice, "id" | "createdAt">): Notice {
+export async function createNotice(data: Omit<Notice, "id" | "createdAt">): Promise<Notice> {
   const id = newId("ntc");
-  db.prepare(`INSERT INTO notices (id, businessId, title, body) VALUES (@id, @businessId, @title, @body)`).run({
-    id,
-    ...data,
-  });
-  return db.prepare(`SELECT * FROM notices WHERE id = ?`).get(id) as Notice;
+  const createdAt = new Date().toISOString();
+  await db
+    .prepare(`INSERT INTO notices (id, business_id, title, body, created_at) VALUES (@id, @businessId, @title, @body, @createdAt)`)
+    .run({ id, createdAt, ...data });
+  return db.prepare(`SELECT * FROM notices WHERE id = ?`).get(id);
 }
 
 // ---------- Customer ----------
-export function createCustomer(data: Omit<Customer, "id" | "createdAt">): Customer {
+export async function createCustomer(data: Omit<Customer, "id" | "createdAt">): Promise<Customer> {
   const id = newId("cus");
-  db.prepare(
-    `INSERT INTO customers (id, name, email, passwordHash, phone) VALUES (@id, @name, @email, @passwordHash, @phone)`
-  ).run({ id, ...data });
-  return getCustomerById(id)!;
+  const createdAt = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO customers (id, name, email, password_hash, phone, created_at) VALUES (@id, @name, @email, @passwordHash, @phone, @createdAt)`
+    )
+    .run({ id, createdAt, ...data });
+  return (await getCustomerById(id))!;
 }
 
-export function getCustomerByEmail(email: string): Customer | undefined {
-  return db.prepare(`SELECT * FROM customers WHERE email = ?`).get(email) as Customer | undefined;
+export async function getCustomerByEmail(email: string): Promise<Customer | undefined> {
+  return db.prepare(`SELECT * FROM customers WHERE email = ?`).get(email);
 }
 
-export function getCustomerById(id: string): Customer | undefined {
-  return db.prepare(`SELECT * FROM customers WHERE id = ?`).get(id) as Customer | undefined;
+export async function getCustomerById(id: string): Promise<Customer | undefined> {
+  return db.prepare(`SELECT * FROM customers WHERE id = ?`).get(id);
 }
 
-export function listPetsByCustomer(customerId: string): Pet[] {
-  return db.prepare(`SELECT * FROM pets WHERE customerId = ?`).all(customerId) as Pet[];
+export async function listPetsByCustomer(customerId: string): Promise<Pet[]> {
+  return db.prepare(`SELECT * FROM pets WHERE customer_id = ?`).all(customerId);
 }
 
-export function getPetById(id: string): Pet | undefined {
-  return db.prepare(`SELECT * FROM pets WHERE id = ?`).get(id) as Pet | undefined;
+export async function getPetById(id: string): Promise<Pet | undefined> {
+  return db.prepare(`SELECT * FROM pets WHERE id = ?`).get(id);
 }
 
-export function createPet(data: Omit<Pet, "id">): Pet {
+export async function createPet(data: Omit<Pet, "id">): Promise<Pet> {
   const id = newId("pet");
-  db.prepare(
-    `INSERT INTO pets (id, customerId, name, breed, weightKg, age, avatarColor, note)
-     VALUES (@id, @customerId, @name, @breed, @weightKg, @age, @avatarColor, @note)`
-  ).run({ id, ...data });
-  return getPetById(id)!;
+  await db
+    .prepare(
+      `INSERT INTO pets (id, customer_id, name, breed, weight_kg, age, avatar_color, note)
+       VALUES (@id, @customerId, @name, @breed, @weightKg, @age, @avatarColor, @note)`
+    )
+    .run({ id, ...data });
+  return (await getPetById(id))!;
 }
 
 // ---------- Reservations ----------
-export function createReservation(data: {
+export async function createReservation(data: {
   businessId: string;
   customerId: string;
   petId: string;
@@ -221,50 +231,49 @@ export function createReservation(data: {
   depositPrice: number;
   staffName: string;
   optionIds: string[];
-}): Reservation {
+}): Promise<Reservation> {
   const id = newId("rsv");
-  db.exec("BEGIN");
-  try {
-    db.prepare(
-      `INSERT INTO reservations (id, businessId, customerId, petId, serviceMenuId, staffName, scheduledAt, requestNote, totalPrice, depositPrice, depositPaid, status)
-       VALUES (@id, @businessId, @customerId, @petId, @serviceMenuId, @staffName, @scheduledAt, @requestNote, @totalPrice, @depositPrice, 1, 'PENDING_APPROVAL')`
-    ).run({
-      id,
-      businessId: data.businessId,
-      customerId: data.customerId,
-      petId: data.petId,
-      serviceMenuId: data.serviceMenuId,
-      staffName: data.staffName,
-      scheduledAt: data.scheduledAt,
-      requestNote: data.requestNote,
-      totalPrice: data.totalPrice,
-      depositPrice: data.depositPrice,
-    });
-    for (const optionId of data.optionIds) {
-      db.prepare(`INSERT INTO reservation_options (id, reservationId, serviceOptionId) VALUES (?, ?, ?)`).run(
-        newId("rso"),
+  const createdAt = new Date().toISOString();
+
+  await withTransaction(async (tx) => {
+    await tx
+      .prepare(
+        `INSERT INTO reservations (id, business_id, customer_id, pet_id, service_menu_id, staff_name, scheduled_at, request_note, total_price, deposit_price, deposit_paid, status, created_at)
+         VALUES (@id, @businessId, @customerId, @petId, @serviceMenuId, @staffName, @scheduledAt, @requestNote, @totalPrice, @depositPrice, 1, 'PENDING_APPROVAL', @createdAt)`
+      )
+      .run({
         id,
-        optionId
-      );
+        createdAt,
+        businessId: data.businessId,
+        customerId: data.customerId,
+        petId: data.petId,
+        serviceMenuId: data.serviceMenuId,
+        staffName: data.staffName,
+        scheduledAt: data.scheduledAt,
+        requestNote: data.requestNote,
+        totalPrice: data.totalPrice,
+        depositPrice: data.depositPrice,
+      });
+    for (const optionId of data.optionIds) {
+      await tx
+        .prepare(`INSERT INTO reservation_options (id, reservation_id, service_option_id) VALUES (?, ?, ?)`)
+        .run(newId("rso"), id, optionId);
     }
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
-  return getReservationById(id)!;
+  });
+
+  return (await getReservationById(id))!;
 }
 
-export function getReservationById(id: string): Reservation | undefined {
-  return db.prepare(`SELECT * FROM reservations WHERE id = ?`).get(id) as Reservation | undefined;
+export async function getReservationById(id: string): Promise<Reservation | undefined> {
+  return db.prepare(`SELECT * FROM reservations WHERE id = ?`).get(id);
 }
 
-export function getReservationOptionNames(reservationId: string): ServiceOption[] {
+export async function getReservationOptionNames(reservationId: string): Promise<ServiceOption[]> {
   return db
     .prepare(
-      `SELECT so.* FROM reservation_options ro JOIN service_options so ON so.id = ro.serviceOptionId WHERE ro.reservationId = ?`
+      `SELECT so.* FROM reservation_options ro JOIN service_options so ON so.id = ro.service_option_id WHERE ro.reservation_id = ?`
     )
-    .all(reservationId) as ServiceOption[];
+    .all(reservationId);
 }
 
 export type ReservationFull = Reservation & {
@@ -276,88 +285,92 @@ export type ReservationFull = Reservation & {
   servicePrice: number;
 };
 
-export function listReservationsByBusiness(businessId: string): ReservationFull[] {
+export async function listReservationsByBusiness(businessId: string): Promise<ReservationFull[]> {
   return db
     .prepare(
-      `SELECT r.*, p.name as petName, p.breed as petBreed, c.name as customerName, b.name as businessName,
-              sm.name as serviceName, sm.price as servicePrice
+      `SELECT r.*, p.name as pet_name, p.breed as pet_breed, c.name as customer_name, b.name as business_name,
+              sm.name as service_name, sm.price as service_price
        FROM reservations r
-       JOIN pets p ON p.id = r.petId
-       JOIN customers c ON c.id = r.customerId
-       JOIN businesses b ON b.id = r.businessId
-       JOIN service_menus sm ON sm.id = r.serviceMenuId
-       WHERE r.businessId = ?
-       ORDER BY r.scheduledAt ASC`
+       JOIN pets p ON p.id = r.pet_id
+       JOIN customers c ON c.id = r.customer_id
+       JOIN businesses b ON b.id = r.business_id
+       JOIN service_menus sm ON sm.id = r.service_menu_id
+       WHERE r.business_id = ?
+       ORDER BY r.scheduled_at ASC`
     )
-    .all(businessId) as ReservationFull[];
+    .all(businessId);
 }
 
-export function listReservationsByCustomer(customerId: string): ReservationFull[] {
+export async function listReservationsByCustomer(customerId: string): Promise<ReservationFull[]> {
   return db
     .prepare(
-      `SELECT r.*, p.name as petName, p.breed as petBreed, c.name as customerName, b.name as businessName,
-              sm.name as serviceName, sm.price as servicePrice
+      `SELECT r.*, p.name as pet_name, p.breed as pet_breed, c.name as customer_name, b.name as business_name,
+              sm.name as service_name, sm.price as service_price
        FROM reservations r
-       JOIN pets p ON p.id = r.petId
-       JOIN customers c ON c.id = r.customerId
-       JOIN businesses b ON b.id = r.businessId
-       JOIN service_menus sm ON sm.id = r.serviceMenuId
-       WHERE r.customerId = ?
-       ORDER BY r.scheduledAt DESC`
+       JOIN pets p ON p.id = r.pet_id
+       JOIN customers c ON c.id = r.customer_id
+       JOIN businesses b ON b.id = r.business_id
+       JOIN service_menus sm ON sm.id = r.service_menu_id
+       WHERE r.customer_id = ?
+       ORDER BY r.scheduled_at DESC`
     )
-    .all(customerId) as ReservationFull[];
+    .all(customerId);
 }
 
-export function getNextReservationForCustomer(customerId: string): ReservationFull | undefined {
+export async function getNextReservationForCustomer(customerId: string): Promise<ReservationFull | undefined> {
   const nowIso = new Date().toISOString();
-  return listReservationsByCustomer(customerId)
+  const all = await listReservationsByCustomer(customerId);
+  return all
     .filter((r) => r.status !== "CANCELED" && r.status !== "COMPLETED" && r.scheduledAt >= nowIso)
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt))[0];
 }
 
-export function updateReservationStatus(id: string, status: ReservationStatus) {
+export async function updateReservationStatus(id: string, status: ReservationStatus) {
   const completedAt = status === "COMPLETED" ? new Date().toISOString() : null;
-  db.prepare(`UPDATE reservations SET status = ?, completedAt = ? WHERE id = ?`).run(status, completedAt, id);
+  await db.prepare(`UPDATE reservations SET status = ?, completed_at = ? WHERE id = ?`).run(status, completedAt, id);
   return getReservationById(id);
 }
 
 // ---------- Stays ----------
-export function listStaysByBusiness(businessId: string) {
+export async function listStaysByBusiness(businessId: string): Promise<(Stay & { petName: string; petBreed: string })[]> {
   return db
     .prepare(
-      `SELECT s.*, p.name as petName, p.breed as petBreed FROM stays s JOIN pets p ON p.id = s.petId WHERE s.businessId = ? ORDER BY checkIn ASC`
+      `SELECT s.*, p.name as pet_name, p.breed as pet_breed FROM stays s JOIN pets p ON p.id = s.pet_id WHERE s.business_id = ? ORDER BY check_in ASC`
     )
-    .all(businessId) as (Stay & { petName: string; petBreed: string })[];
+    .all(businessId);
 }
 
-export function createStay(data: Omit<Stay, "id">) {
+export async function createStay(data: Omit<Stay, "id">) {
   const id = newId("stay");
-  db.prepare(
-    `INSERT INTO stays (id, businessId, petId, checkIn, checkOut, status) VALUES (@id, @businessId, @petId, @checkIn, @checkOut, @status)`
-  ).run({ id, ...data });
+  await db
+    .prepare(
+      `INSERT INTO stays (id, business_id, pet_id, check_in, check_out, status) VALUES (@id, @businessId, @petId, @checkIn, @checkOut, @status)`
+    )
+    .run({ id, ...data });
 }
 
 // ---------- Chat ----------
-export function getOrCreateThread(businessId: string, customerId: string, reservationId?: string): ChatThread {
-  const existing = db
-    .prepare(`SELECT * FROM chat_threads WHERE businessId = ? AND customerId = ?`)
-    .get(businessId, customerId) as ChatThread | undefined;
+export async function getOrCreateThread(businessId: string, customerId: string, reservationId?: string): Promise<ChatThread> {
+  const existing: ChatThread | undefined = await db
+    .prepare(`SELECT * FROM chat_threads WHERE business_id = ? AND customer_id = ?`)
+    .get(businessId, customerId);
   if (existing) {
     if (reservationId && !existing.reservationId) {
-      db.prepare(`UPDATE chat_threads SET reservationId = ? WHERE id = ?`).run(reservationId, existing.id);
+      await db.prepare(`UPDATE chat_threads SET reservation_id = ? WHERE id = ?`).run(reservationId, existing.id);
       return { ...existing, reservationId };
     }
     return existing;
   }
   const id = newId("thr");
-  db.prepare(
-    `INSERT INTO chat_threads (id, businessId, customerId, reservationId) VALUES (?, ?, ?, ?)`
-  ).run(id, businessId, customerId, reservationId ?? null);
-  return db.prepare(`SELECT * FROM chat_threads WHERE id = ?`).get(id) as ChatThread;
+  const now = new Date().toISOString();
+  await db
+    .prepare(`INSERT INTO chat_threads (id, business_id, customer_id, reservation_id, last_message_at) VALUES (?, ?, ?, ?, ?)`)
+    .run(id, businessId, customerId, reservationId ?? null, now);
+  return db.prepare(`SELECT * FROM chat_threads WHERE id = ?`).get(id);
 }
 
-export function getThreadById(id: string): ChatThread | undefined {
-  return db.prepare(`SELECT * FROM chat_threads WHERE id = ?`).get(id) as ChatThread | undefined;
+export async function getThreadById(id: string): Promise<ChatThread | undefined> {
+  return db.prepare(`SELECT * FROM chat_threads WHERE id = ?`).get(id);
 }
 
 export type ThreadWithParty = ChatThread & {
@@ -367,121 +380,117 @@ export type ThreadWithParty = ChatThread & {
   lastMessage: string | null;
 };
 
-export function listThreadsByBusiness(businessId: string): ThreadWithParty[] {
+export async function listThreadsByBusiness(businessId: string): Promise<ThreadWithParty[]> {
   return db
     .prepare(
-      `SELECT t.*, b.name as businessName, b.heroColor as businessHeroColor, c.name as customerName,
-        (SELECT content FROM chat_messages m WHERE m.threadId = t.id ORDER BY m.createdAt DESC LIMIT 1) as lastMessage
+      `SELECT t.*, b.name as business_name, b.hero_color as business_hero_color, c.name as customer_name,
+        (SELECT content FROM chat_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) as last_message
        FROM chat_threads t
-       JOIN businesses b ON b.id = t.businessId
-       JOIN customers c ON c.id = t.customerId
-       WHERE t.businessId = ?
-       ORDER BY t.lastMessageAt DESC`
+       JOIN businesses b ON b.id = t.business_id
+       JOIN customers c ON c.id = t.customer_id
+       WHERE t.business_id = ?
+       ORDER BY t.last_message_at DESC`
     )
-    .all(businessId) as ThreadWithParty[];
+    .all(businessId);
 }
 
-export function listThreadsByCustomer(customerId: string): ThreadWithParty[] {
+export async function listThreadsByCustomer(customerId: string): Promise<ThreadWithParty[]> {
   return db
     .prepare(
-      `SELECT t.*, b.name as businessName, b.heroColor as businessHeroColor, c.name as customerName,
-        (SELECT content FROM chat_messages m WHERE m.threadId = t.id ORDER BY m.createdAt DESC LIMIT 1) as lastMessage
+      `SELECT t.*, b.name as business_name, b.hero_color as business_hero_color, c.name as customer_name,
+        (SELECT content FROM chat_messages m WHERE m.thread_id = t.id ORDER BY m.created_at DESC LIMIT 1) as last_message
        FROM chat_threads t
-       JOIN businesses b ON b.id = t.businessId
-       JOIN customers c ON c.id = t.customerId
-       WHERE t.customerId = ?
-       ORDER BY t.lastMessageAt DESC`
+       JOIN businesses b ON b.id = t.business_id
+       JOIN customers c ON c.id = t.customer_id
+       WHERE t.customer_id = ?
+       ORDER BY t.last_message_at DESC`
     )
-    .all(customerId) as ThreadWithParty[];
+    .all(customerId);
 }
 
-export function listMessages(threadId: string): ChatMessage[] {
-  return db.prepare(`SELECT * FROM chat_messages WHERE threadId = ? ORDER BY createdAt ASC`).all(threadId) as ChatMessage[];
+export async function listMessages(threadId: string): Promise<ChatMessage[]> {
+  return db.prepare(`SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY created_at ASC`).all(threadId);
 }
 
-export function sendMessage(threadId: string, senderType: "CUSTOMER" | "BUSINESS", content: string): ChatMessage {
+export async function sendMessage(threadId: string, senderType: "CUSTOMER" | "BUSINESS", content: string): Promise<ChatMessage> {
   const id = newId("msg");
   const now = new Date().toISOString();
-  db.prepare(`INSERT INTO chat_messages (id, threadId, senderType, content, createdAt) VALUES (?, ?, ?, ?, ?)`).run(
-    id,
-    threadId,
-    senderType,
-    content,
-    now
-  );
-  const unreadField = senderType === "CUSTOMER" ? "businessUnread" : "customerUnread";
-  db.prepare(`UPDATE chat_threads SET lastMessageAt = ?, ${unreadField} = ${unreadField} + 1 WHERE id = ?`).run(now, threadId);
-  return db.prepare(`SELECT * FROM chat_messages WHERE id = ?`).get(id) as ChatMessage;
+  await db
+    .prepare(`INSERT INTO chat_messages (id, thread_id, sender_type, content, created_at) VALUES (?, ?, ?, ?, ?)`)
+    .run(id, threadId, senderType, content, now);
+  const unreadCol = senderType === "CUSTOMER" ? "business_unread" : "customer_unread";
+  await db
+    .prepare(`UPDATE chat_threads SET last_message_at = ?, ${unreadCol} = ${unreadCol} + 1 WHERE id = ?`)
+    .run(now, threadId);
+  return db.prepare(`SELECT * FROM chat_messages WHERE id = ?`).get(id);
 }
 
-export function markThreadRead(threadId: string, role: "CUSTOMER" | "BUSINESS") {
-  const field = role === "CUSTOMER" ? "customerUnread" : "businessUnread";
-  db.prepare(`UPDATE chat_threads SET ${field} = 0 WHERE id = ?`).run(threadId);
+export async function markThreadRead(threadId: string, role: "CUSTOMER" | "BUSINESS") {
+  const col = role === "CUSTOMER" ? "customer_unread" : "business_unread";
+  await db.prepare(`UPDATE chat_threads SET ${col} = 0 WHERE id = ?`).run(threadId);
 }
 
-export function countUnreadThreads(businessOrCustomerId: string, role: "CUSTOMER" | "BUSINESS") {
-  const col = role === "CUSTOMER" ? "customerId" : "businessId";
-  const unreadCol = role === "CUSTOMER" ? "customerUnread" : "businessUnread";
-  const row = db
+export async function countUnreadThreads(businessOrCustomerId: string, role: "CUSTOMER" | "BUSINESS") {
+  const col = role === "CUSTOMER" ? "customer_id" : "business_id";
+  const unreadCol = role === "CUSTOMER" ? "customer_unread" : "business_unread";
+  const row: { n: number } = await db
     .prepare(`SELECT COUNT(*) as n FROM chat_threads WHERE ${col} = ? AND ${unreadCol} > 0`)
-    .get(businessOrCustomerId) as { n: number };
-  return row.n;
+    .get(businessOrCustomerId);
+  return Number(row.n);
 }
 
-export function oldestUnreadThreadMinutesAgo(businessId: string): number | null {
-  const row = db
+export async function oldestUnreadThreadMinutesAgo(businessId: string): Promise<number | null> {
+  const row: { createdAt: string } | undefined = await db
     .prepare(
-      `SELECT m.createdAt as createdAt FROM chat_threads t
-       JOIN chat_messages m ON m.threadId = t.id
-       WHERE t.businessId = ? AND t.businessUnread > 0
-       ORDER BY m.createdAt ASC LIMIT 1`
+      `SELECT m.created_at as created_at FROM chat_threads t
+       JOIN chat_messages m ON m.thread_id = t.id
+       WHERE t.business_id = ? AND t.business_unread > 0
+       ORDER BY m.created_at ASC LIMIT 1`
     )
-    .get(businessId) as { createdAt: string } | undefined;
+    .get(businessId);
   if (!row) return null;
   return Math.max(0, Math.round((Date.now() - new Date(row.createdAt).getTime()) / 60000));
 }
 
 export type CustomerWithPets = Customer & { pets: Pet[]; reservationCount: number; lastVisit: string | null };
 
-export function listCustomersForBusiness(businessId: string): CustomerWithPets[] {
-  const customerIds = db
+export async function listCustomersForBusiness(businessId: string): Promise<CustomerWithPets[]> {
+  const customerIds: { customerId: string }[] = await db
     .prepare(
-      `SELECT DISTINCT customerId FROM reservations WHERE businessId = ?
+      `SELECT DISTINCT customer_id as customer_id FROM reservations WHERE business_id = ?
        UNION
-       SELECT DISTINCT customerId FROM chat_threads WHERE businessId = ?`
+       SELECT DISTINCT customer_id as customer_id FROM chat_threads WHERE business_id = ?`
     )
-    .all(businessId, businessId) as { customerId: string }[];
+    .all(businessId, businessId);
 
-  return customerIds
-    .map(({ customerId }) => {
-      const customer = getCustomerById(customerId)!;
-      const pets = listPetsByCustomer(customerId);
-      const stats = db
-        .prepare(
-          `SELECT COUNT(*) as n, MAX(scheduledAt) as last FROM reservations WHERE businessId = ? AND customerId = ?`
-        )
-        .get(businessId, customerId) as { n: number; last: string | null };
-      return { ...customer, pets, reservationCount: stats.n, lastVisit: stats.last };
-    })
-    .sort((a, b) => (b.lastVisit ?? "").localeCompare(a.lastVisit ?? ""));
+  const result: CustomerWithPets[] = [];
+  for (const { customerId } of customerIds) {
+    const customer = (await getCustomerById(customerId))!;
+    const pets = await listPetsByCustomer(customerId);
+    const stats: { n: number; last: string | null } = await db
+      .prepare(`SELECT COUNT(*) as n, MAX(scheduled_at) as last FROM reservations WHERE business_id = ? AND customer_id = ?`)
+      .get(businessId, customerId);
+    result.push({ ...customer, pets, reservationCount: Number(stats.n), lastVisit: stats.last });
+  }
+  return result.sort((a, b) => (b.lastVisit ?? "").localeCompare(a.lastVisit ?? ""));
 }
 
 // ---------- Dashboard ----------
-export function getBusinessDashboard(businessId: string) {
+export async function getBusinessDashboard(businessId: string) {
   const todayStr = new Date().toISOString().slice(0, 10);
-  const all = listReservationsByBusiness(businessId);
+  const all = await listReservationsByBusiness(businessId);
   const todays = all.filter((r) => r.scheduledAt.slice(0, 10) === todayStr && r.status !== "CANCELED");
   const completedToday = todays.filter((r) => r.status === "COMPLETED");
   const remainingToday = todays.filter((r) => r.status !== "COMPLETED");
   const pending = all.filter((r) => r.status === "PENDING_APPROVAL");
 
-  const stays = listStaysByBusiness(businessId);
+  const stays = await listStaysByBusiness(businessId);
   const activeStays = stays.filter((s) => s.status === "CHECKED_IN");
   const checkInToday = stays.filter((s) => s.checkIn.slice(0, 10) === todayStr).length;
   const checkOutToday = stays.filter((s) => s.checkOut.slice(0, 10) === todayStr).length;
 
-  const unreadThreads = countUnreadThreads(businessId, "BUSINESS");
-  const oldestUnreadMin = oldestUnreadThreadMinutesAgo(businessId);
+  const unreadThreads = await countUnreadThreads(businessId, "BUSINESS");
+  const oldestUnreadMin = await oldestUnreadThreadMinutesAgo(businessId);
 
   const todayRevenue = todays.reduce((sum, r) => sum + r.totalPrice, 0);
   const pendingSettlement = all

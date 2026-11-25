@@ -4,7 +4,7 @@ import { getReservationById, updateReservationStatus, type ReservationStatus } f
 
 export async function PATCH(request: Request, ctx: RouteContext<"/api/reservations/[id]">) {
   const { id } = await ctx.params;
-  const reservation = getReservationById(id);
+  const reservation = await getReservationById(id);
   if (!reservation) return NextResponse.json({ error: "예약을 찾을 수 없습니다." }, { status: 404 });
 
   const { status } = (await request.json()) as { status: ReservationStatus };
@@ -23,6 +23,6 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/reservatio
     return NextResponse.json({ error: "고객은 취소만 할 수 있습니다." }, { status: 403 });
   }
 
-  const updated = updateReservationStatus(id, status);
+  const updated = await updateReservationStatus(id, status);
   return NextResponse.json({ reservation: updated });
 }

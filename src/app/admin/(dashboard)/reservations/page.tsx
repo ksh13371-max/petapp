@@ -18,8 +18,15 @@ export default async function AdminReservationsPage({ searchParams }: PageProps<
   const { status } = await searchParams;
   const activeTab = typeof status === "string" ? status : "ALL";
 
-  const all = listReservationsByBusiness(session!.sub).sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
+  const allUnsorted = await listReservationsByBusiness(session!.sub);
+  const all = allUnsorted.sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
   const filtered = activeTab === "ALL" ? all : all.filter((r) => r.status === activeTab);
+  const rowDetails = await Promise.all(
+    filtered.map(async (r) => ({
+      pet: await getPetById(r.petId),
+      options: await getReservationOptionNames(r.id),
+    }))
+  );
 
   return (
     <div className="max-w-6xl mx-auto px-8 py-8">
@@ -55,9 +62,8 @@ export default async function AdminReservationsPage({ searchParams }: PageProps<
 
         {filtered.length === 0 && <p className="py-16 text-center text-ink-400 text-sm">예약이 없어요.</p>}
 
-        {filtered.map((r) => {
-          const pet = getPetById(r.petId);
-          const options = getReservationOptionNames(r.id);
+        {filtered.map((r, i) => {
+          const { pet, options } = rowDetails[i];
           return (
             <div
               key={r.id}

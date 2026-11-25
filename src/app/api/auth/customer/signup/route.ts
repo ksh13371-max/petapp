@@ -9,14 +9,14 @@ export async function POST(request: Request) {
   if (!name || !email || !password) {
     return NextResponse.json({ error: "필수 정보를 입력해주세요." }, { status: 400 });
   }
-  if (getCustomerByEmail(email)) {
+  if (await getCustomerByEmail(email)) {
     return NextResponse.json({ error: "이미 가입된 이메일입니다." }, { status: 409 });
   }
   const passwordHash = await hashPassword(password);
-  const customer = createCustomer({ name, email, passwordHash, phone: phone ?? "" });
+  const customer = await createCustomer({ name, email, passwordHash, phone: phone ?? "" });
 
   if (pet?.name && pet?.breed) {
-    createPet({
+    await createPet({
       customerId: customer.id,
       name: pet.name,
       breed: pet.breed,

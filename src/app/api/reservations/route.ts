@@ -23,17 +23,17 @@ export async function POST(request: Request) {
     staffName?: string;
   };
 
-  const service = getServiceById(serviceMenuId);
-  const pet = getPetById(petId);
+  const service = await getServiceById(serviceMenuId);
+  const pet = await getPetById(petId);
   if (!service || !pet || pet.customerId !== session.sub) {
     return NextResponse.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
-  const businessOptions = listOptionsByBusiness(service.businessId);
+  const businessOptions = await listOptionsByBusiness(service.businessId);
   const selectedOptions = businessOptions.filter((o) => (optionIds ?? []).includes(o.id));
   const totalPrice = service.price + selectedOptions.reduce((sum, o) => sum + o.price, 0);
 
-  const reservation = createReservation({
+  const reservation = await createReservation({
     businessId: service.businessId,
     customerId: session.sub,
     petId,
@@ -46,8 +46,8 @@ export async function POST(request: Request) {
     optionIds: selectedOptions.map((o) => o.id),
   });
 
-  const thread = getOrCreateThread(service.businessId, session.sub, reservation.id);
-  sendMessage(
+  const thread = await getOrCreateThread(service.businessId, session.sub, reservation.id);
+  await sendMessage(
     thread.id,
     "BUSINESS",
     `예약이 접수됐어요! ${pet.name} · ${service.name} · ${new Date(scheduledAt).toLocaleString("ko-KR")}\n확인 후 빠르게 안내드릴게요 🐾`

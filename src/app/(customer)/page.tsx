@@ -10,8 +10,15 @@ export default async function CustomerHomePage({ searchParams }: PageProps<"/">)
   const { category } = await searchParams;
   const activeCategory = typeof category === "string" ? (category as CategoryCode) : undefined;
 
-  const businesses = activeCategory ? listBusinessesByCategory(activeCategory) : listBusinesses();
-  const nextReservation = session ? getNextReservationForCustomer(session.sub) : undefined;
+  const businesses = activeCategory ? await listBusinessesByCategory(activeCategory) : await listBusinesses();
+  const nextReservation = session ? await getNextReservationForCustomer(session.sub) : undefined;
+  const businessCards = await Promise.all(
+    businesses.map(async (b) => {
+      const services = await listServicesByBusiness(b.id);
+      const minPrice = services.length > 0 ? Math.min(...services.map((s) => s.price)) : 0;
+      return { b, minPrice };
+    })
+  );
 
   const listHeading = activeCategory
     ? `오늘의 ${CATEGORIES.find((c) => c.code === activeCategory)?.label}`
@@ -118,22 +125,18 @@ export default async function CustomerHomePage({ searchParams }: PageProps<"/">)
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {businesses.map((b) => {
-              const services = listServicesByBusiness(b.id);
-              const minPrice = services.length > 0 ? Math.min(...services.map((s) => s.price)) : 0;
-              return (
-                <BusinessCard
-                  key={b.id}
-                  id={b.id}
-                  name={b.name}
-                  heroColor={b.heroColor}
-                  rating={b.rating}
-                  reviewCount={b.reviewCount}
-                  district={b.district}
-                  minPrice={minPrice}
-                />
-              );
-            })}
+            {businessCards.map(({ b, minPrice }) => (
+              <BusinessCard
+                key={b.id}
+                id={b.id}
+                name={b.name}
+                heroColor={b.heroColor}
+                rating={b.rating}
+                reviewCount={b.reviewCount}
+                district={b.district}
+                minPrice={minPrice}
+              />
+            ))}
           </div>
         )}
       </div>

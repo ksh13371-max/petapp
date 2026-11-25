@@ -4,7 +4,7 @@ import { verifyPassword, signSession, setBusinessSessionCookie } from "@/lib/aut
 
 export async function POST(request: Request) {
   const { email, password } = await request.json();
-  const business = getBusinessByEmail(email);
+  const business = await getBusinessByEmail(email);
   if (!business || !(await verifyPassword(password, business.passwordHash))) {
     return NextResponse.json({ error: "이메일 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
   }

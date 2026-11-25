@@ -1,89 +1,149 @@
-import { DatabaseSync, type StatementSync } from "node:sqlite";
-import path from "path";
-import fs from "fs";
+import { Pool, type PoolClient } from "pg";
 
-const DB_PATH = path.join(process.cwd(), "data", "app.db");
-
-// node:sqlite returns rows as null-prototype objects, which React Server
-// Components refuse to pass to Client Components. Shallow-copy to plain
-// objects so DB rows can flow straight into props.
-function toPlain(row: unknown) {
-  return row == null ? row : { ...(row as object) };
-}
-
-function wrapStatement(stmt: StatementSync) {
-  return {
-    run: stmt.run.bind(stmt),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    get: (...args: any[]) => toPlain((stmt.get as any)(...args)),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    all: (...args: any[]) => (stmt.all as any)(...args).map(toPlain),
-  };
-}
-
-export interface Db {
-  exec: DatabaseSync["exec"];
-  prepare: (sql: string) => ReturnType<typeof wrapStatement>;
-}
+type Queryable = {
+  query: (text: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+};
 
 declare global {
-  var __petDb: Db | undefined;
+  var __petPool: Pool | undefined;
 }
 
-function createConnection(): Db {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const raw = new DatabaseSync(DB_PATH);
-  raw.exec("PRAGMA journal_mode = WAL");
-  raw.exec("PRAGMA foreign_keys = ON");
+const connectionString = process.env.DATABASE_URL;
+const isLocal = !!connectionString && /localhost|127\.0\.0\.1/.test(connectionString);
+
+export const pool =
+  global.__petPool ??
+  new Pool({
+    connectionString,
+    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+    max: 5,
+  });
+if (process.env.NODE_ENV !== "production") global.__petPool = pool;
+
+// ---- snake_case (DB) <-> camelCase (app) ----
+function camelize(key: string) {
+  return key.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+}
+function camelizeRow<T>(row: Record<string, unknown>): T {
+  const out: Record<string, unknown> = {};
+  for (const k in row) out[camelize(k)] = row[k];
+  return out as T;
+}
+
+// ---- parse `@camelName` / `?` placeholders into Postgres `$1, $2, ...` ----
+function toPgQuery(sql: string) {
+  const names: (string | null)[] = [];
+  let i = 0;
+  const text = sql.replace(/@(\w+)|\?/g, (_match, name?: string) => {
+    i++;
+    names.push(name ?? null);
+    return `$${i}`;
+  });
+  return { text, names };
+}
+
+function resolveParams(names: (string | null)[], args: unknown[]): unknown[] {
+  if (names.some((n) => n !== null)) {
+    const obj = (args[0] ?? {}) as Record<string, unknown>;
+    return names.map((n) => (n ? (obj[n] ?? null) : null));
+  }
+  return args;
+}
+
+function wrapStatement(queryable: Queryable, sql: string) {
+  const { text, names } = toPgQuery(sql);
   return {
-    exec: raw.exec.bind(raw),
-    prepare: (sql: string) => wrapStatement(raw.prepare(sql)),
+    run: async (...args: unknown[]) => {
+      await ensureSchema();
+      const values = resolveParams(names, args);
+      const res = await queryable.query(text, values);
+      return { changes: res.rowCount ?? 0 };
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    get: async (...args: any[]): Promise<any> => {
+      await ensureSchema();
+      const values = resolveParams(names, args);
+      const res = await queryable.query(text, values);
+      return res.rows[0] ? camelizeRow(res.rows[0]) : undefined;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    all: async (...args: any[]): Promise<any[]> => {
+      await ensureSchema();
+      const values = resolveParams(names, args);
+      const res = await queryable.query(text, values);
+      return res.rows.map((r) => camelizeRow(r));
+    },
   };
 }
 
-export const db = global.__petDb ?? createConnection();
-if (process.env.NODE_ENV !== "production") global.__petDb = db;
+function makeDb(queryable: Queryable) {
+  return {
+    exec: async (sql: string) => {
+      await queryable.query(sql);
+    },
+    prepare: (sql: string) => wrapStatement(queryable, sql),
+  };
+}
 
-export function initSchema() {
-  db.exec(`
+export const db = makeDb(pool);
+export type Db = ReturnType<typeof makeDb>;
+
+export async function withTransaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
+  await ensureSchema();
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(makeDb(client));
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function runInitSchema() {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS businesses (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
-      passwordHash TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
       district TEXT NOT NULL DEFAULT '강남구 역삼동',
       address TEXT NOT NULL DEFAULT '',
       phone TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
-      heroColor TEXT NOT NULL DEFAULT '#f4d9c6',
+      hero_color TEXT NOT NULL DEFAULT '#f4d9c6',
       categories TEXT NOT NULL DEFAULT 'GROOMING',
-      openTime TEXT NOT NULL DEFAULT '10:00',
-      closeTime TEXT NOT NULL DEFAULT '19:00',
+      open_time TEXT NOT NULL DEFAULT '10:00',
+      close_time TEXT NOT NULL DEFAULT '19:00',
       rating REAL NOT NULL DEFAULT 4.8,
-      reviewCount INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      review_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS staff (
       id TEXT PRIMARY KEY,
-      businessId TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
       name TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS service_menus (
       id TEXT PRIMARY KEY,
-      businessId TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       price INTEGER NOT NULL,
-      durationMin INTEGER NOT NULL DEFAULT 60,
+      duration_min INTEGER NOT NULL DEFAULT 60,
       category TEXT NOT NULL DEFAULT 'GROOMING',
-      sortOrder INTEGER NOT NULL DEFAULT 0
+      sort_order INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS service_options (
       id TEXT PRIMARY KEY,
-      businessId TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       price INTEGER NOT NULL
     );
@@ -92,96 +152,95 @@ export function initSchema() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
-      passwordHash TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
       phone TEXT NOT NULL DEFAULT '',
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS pets (
       id TEXT PRIMARY KEY,
-      customerId TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       breed TEXT NOT NULL,
-      weightKg REAL NOT NULL,
+      weight_kg REAL NOT NULL,
       age INTEGER NOT NULL,
-      avatarColor TEXT NOT NULL DEFAULT '#f4d9c6',
+      avatar_color TEXT NOT NULL DEFAULT '#f4d9c6',
       note TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS reservations (
       id TEXT PRIMARY KEY,
-      businessId TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-      customerId TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-      petId TEXT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
-      serviceMenuId TEXT NOT NULL REFERENCES service_menus(id),
-      staffName TEXT NOT NULL DEFAULT '담당자',
-      scheduledAt TEXT NOT NULL,
+      business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      pet_id TEXT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+      service_menu_id TEXT NOT NULL REFERENCES service_menus(id),
+      staff_name TEXT NOT NULL DEFAULT '담당자',
+      scheduled_at TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
-      requestNote TEXT NOT NULL DEFAULT '',
-      totalPrice INTEGER NOT NULL,
-      depositPrice INTEGER NOT NULL DEFAULT 20000,
-      depositPaid INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
-      completedAt TEXT
+      request_note TEXT NOT NULL DEFAULT '',
+      total_price INTEGER NOT NULL,
+      deposit_price INTEGER NOT NULL DEFAULT 20000,
+      deposit_paid INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      completed_at TEXT
     );
 
     CREATE TABLE IF NOT EXISTS reservation_options (
       id TEXT PRIMARY KEY,
-      reservationId TEXT NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
-      serviceOptionId TEXT NOT NULL REFERENCES service_options(id)
+      reservation_id TEXT NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
+      service_option_id TEXT NOT NULL REFERENCES service_options(id)
     );
 
     CREATE TABLE IF NOT EXISTS stays (
       id TEXT PRIMARY KEY,
-      businessId TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-      petId TEXT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
-      checkIn TEXT NOT NULL,
-      checkOut TEXT NOT NULL,
+      business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      pet_id TEXT NOT NULL REFERENCES pets(id) ON DELETE CASCADE,
+      check_in TEXT NOT NULL,
+      check_out TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'RESERVED'
     );
 
     CREATE TABLE IF NOT EXISTS notices (
       id TEXT PRIMARY KEY,
-      businessId TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       body TEXT NOT NULL,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS chat_threads (
       id TEXT PRIMARY KEY,
-      businessId TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-      customerId TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-      reservationId TEXT REFERENCES reservations(id),
-      lastMessageAt TEXT NOT NULL DEFAULT (datetime('now')),
-      customerUnread INTEGER NOT NULL DEFAULT 0,
-      businessUnread INTEGER NOT NULL DEFAULT 0,
-      UNIQUE(businessId, customerId)
+      business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      reservation_id TEXT REFERENCES reservations(id),
+      last_message_at TEXT NOT NULL,
+      customer_unread INTEGER NOT NULL DEFAULT 0,
+      business_unread INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(business_id, customer_id)
     );
 
     CREATE TABLE IF NOT EXISTS chat_messages (
       id TEXT PRIMARY KEY,
-      threadId TEXT NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
-      senderType TEXT NOT NULL,
+      thread_id TEXT NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
+      sender_type TEXT NOT NULL,
       content TEXT NOT NULL,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_reservations_business ON reservations(businessId);
-    CREATE INDEX IF NOT EXISTS idx_reservations_customer ON reservations(customerId);
-    CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(threadId);
+    CREATE INDEX IF NOT EXISTS idx_reservations_business ON reservations(business_id);
+    CREATE INDEX IF NOT EXISTS idx_reservations_customer ON reservations(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id);
   `);
-
-  // Migration for databases created before the `categories` column existed.
-  const hasCategories = (
-    db.prepare(`PRAGMA table_info(businesses)`).all() as { name: string }[]
-  ).some((col) => col.name === "categories");
-  if (!hasCategories) {
-    db.exec(`ALTER TABLE businesses ADD COLUMN categories TEXT NOT NULL DEFAULT 'GROOMING'`);
-  }
 }
 
-initSchema();
+declare global {
+  var __petSchemaReady: Promise<void> | undefined;
+}
+
+export function ensureSchema(): Promise<void> {
+  if (!global.__petSchemaReady) global.__petSchemaReady = runInitSchema();
+  return global.__petSchemaReady;
+}
 
 export function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;

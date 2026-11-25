@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const { name, breed, weightKg, age } = await request.json();
   if (!name || !breed) return NextResponse.json({ error: "반려견 정보를 입력해주세요." }, { status: 400 });
 
-  const pet = createPet({
+  const pet = await createPet({
     customerId: session.sub,
     name,
     breed,

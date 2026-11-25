@@ -20,12 +20,12 @@ export default async function BusinessDetailPage({ params, searchParams }: PageP
   const { tab } = await searchParams;
   const activeTab = typeof tab === "string" ? tab : "home";
 
-  const business = getBusinessById(id);
+  const business = await getBusinessById(id);
   if (!business) notFound();
 
-  const services = listServicesByBusiness(id);
-  const options = listOptionsByBusiness(id);
-  const notices = listNoticesByBusiness(id);
+  const services = await listServicesByBusiness(id);
+  const options = await listOptionsByBusiness(id);
+  const notices = await listNoticesByBusiness(id);
   const session = await getCustomerSession();
   const minPrice = services.length > 0 ? Math.min(...services.map((s) => s.price)) : 0;
   const categories = parseCategories(business.categories);

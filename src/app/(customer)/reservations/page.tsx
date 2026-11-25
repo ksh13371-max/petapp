@@ -11,7 +11,8 @@ export default async function CustomerReservationsPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/login");
 
-  const reservations = listReservationsByCustomer(session.sub);
+  const reservations = await listReservationsByCustomer(session.sub);
+  const reservationOptions = await Promise.all(reservations.map((r) => getReservationOptionNames(r.id)));
 
   return (
     <div>
@@ -27,8 +28,8 @@ export default async function CustomerReservationsPage() {
             </div>
           </div>
         )}
-        {reservations.map((r) => {
-          const opts = getReservationOptionNames(r.id);
+        {reservations.map((r, i) => {
+          const opts = reservationOptions[i];
           return (
             <div key={r.id} className="rounded-2xl border border-ink-100 p-4">
               <div className="flex items-center justify-between mb-3">

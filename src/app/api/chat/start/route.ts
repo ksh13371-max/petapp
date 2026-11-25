@@ -7,6 +7,6 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
 
   const { businessId } = (await request.json()) as { businessId: string };
-  const thread = getOrCreateThread(businessId, session.sub);
+  const thread = await getOrCreateThread(businessId, session.sub);
   return NextResponse.json({ thread });
 }

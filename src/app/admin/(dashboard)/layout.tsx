@@ -7,11 +7,11 @@ export default async function AdminDashboardLayout({ children }: LayoutProps<"/a
   const session = await getBusinessSession();
   if (!session) redirect("/admin/login");
 
-  const business = getBusinessById(session.sub);
+  const business = await getBusinessById(session.sub);
   if (!business) redirect("/admin/login");
 
-  const stats = getBusinessDashboard(business.id);
-  const chatCount = countUnreadThreads(business.id, "BUSINESS");
+  const stats = await getBusinessDashboard(business.id);
+  const chatCount = await countUnreadThreads(business.id, "BUSINESS");
 
   return (
     <div className="min-h-dvh flex bg-ink-50">

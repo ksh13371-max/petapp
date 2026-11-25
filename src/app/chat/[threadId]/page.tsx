@@ -19,15 +19,15 @@ export default async function CustomerChatThreadPage({ params }: PageProps<"/cha
   const session = await getCustomerSession();
   if (!session) redirect("/login");
 
-  const thread = getThreadById(threadId);
+  const thread = await getThreadById(threadId);
   if (!thread || thread.customerId !== session.sub) notFound();
 
-  const business = getBusinessById(thread.businessId)!;
-  const messages = listMessages(threadId);
-  const reservation = thread.reservationId ? getReservationById(thread.reservationId) : undefined;
-  const reservationOptions = reservation ? getReservationOptionNames(reservation.id) : [];
-  const reservationService = reservation ? getServiceById(reservation.serviceMenuId) : undefined;
-  const reservationPet = reservation ? getPetById(reservation.petId) : undefined;
+  const business = (await getBusinessById(thread.businessId))!;
+  const messages = await listMessages(threadId);
+  const reservation = thread.reservationId ? await getReservationById(thread.reservationId) : undefined;
+  const reservationOptions = reservation ? await getReservationOptionNames(reservation.id) : [];
+  const reservationService = reservation ? await getServiceById(reservation.serviceMenuId) : undefined;
+  const reservationPet = reservation ? await getPetById(reservation.petId) : undefined;
 
   return (
     <div className="flex flex-col h-dvh">

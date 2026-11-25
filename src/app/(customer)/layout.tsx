@@ -4,7 +4,7 @@ import { CustomerBottomNav } from "@/components/CustomerBottomNav";
 
 export default async function CustomerLayout({ children }: LayoutProps<"/">) {
   const session = await getCustomerSession();
-  const chatUnread = session ? countUnreadThreads(session.sub, "CUSTOMER") : 0;
+  const chatUnread = session ? await countUnreadThreads(session.sub, "CUSTOMER") : 0;
 
   return (
     <div className="flex flex-col min-h-dvh bg-ink-50">

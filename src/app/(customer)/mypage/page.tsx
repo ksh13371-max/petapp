@@ -8,9 +8,9 @@ export default async function MyPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/login");
 
-  const customer = getCustomerById(session.sub)!;
-  const pets = listPetsByCustomer(session.sub);
-  const reservations = listReservationsByCustomer(session.sub);
+  const customer = (await getCustomerById(session.sub))!;
+  const pets = await listPetsByCustomer(session.sub);
+  const reservations = await listReservationsByCustomer(session.sub);
   const completedCount = reservations.filter((r) => r.status === "COMPLETED").length;
 
   return (

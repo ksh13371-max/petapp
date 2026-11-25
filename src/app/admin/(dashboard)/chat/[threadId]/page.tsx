@@ -8,11 +8,11 @@ import { ChatPanel } from "@/components/ChatPanel";
 export default async function AdminChatThreadPage({ params }: PageProps<"/admin/chat/[threadId]">) {
   const { threadId } = await params;
   const session = await getBusinessSession();
-  const thread = getThreadById(threadId);
+  const thread = await getThreadById(threadId);
   if (!thread || thread.businessId !== session!.sub) notFound();
 
-  const customer = getCustomerById(thread.customerId)!;
-  const messages = listMessages(threadId);
+  const customer = (await getCustomerById(thread.customerId))!;
+  const messages = await listMessages(threadId);
 
   return (
     <div className="max-w-3xl mx-auto px-8 py-8 h-dvh flex flex-col">

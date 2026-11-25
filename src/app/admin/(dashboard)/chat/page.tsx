@@ -6,7 +6,7 @@ import { Avatar } from "@/components/Avatar";
 
 export default async function AdminChatListPage() {
   const session = await getBusinessSession();
-  const threads = listThreadsByBusiness(session!.sub);
+  const threads = await listThreadsByBusiness(session!.sub);
 
   return (
     <div className="max-w-3xl mx-auto px-8 py-8">

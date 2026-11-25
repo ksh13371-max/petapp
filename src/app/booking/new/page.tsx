@@ -10,12 +10,12 @@ export default async function NewBookingPage({ searchParams }: PageProps<"/booki
   const { businessId } = await searchParams;
   if (typeof businessId !== "string") notFound();
 
-  const business = getBusinessById(businessId);
+  const business = await getBusinessById(businessId);
   if (!business) notFound();
 
-  const services = listServicesByBusiness(businessId);
-  const options = listOptionsByBusiness(businessId);
-  const pets = listPetsByCustomer(session.sub);
+  const services = await listServicesByBusiness(businessId);
+  const options = await listOptionsByBusiness(businessId);
+  const pets = await listPetsByCustomer(session.sub);
 
   return <BookingWizard business={business} services={services} options={options} pets={pets} />;
 }

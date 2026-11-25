@@ -5,7 +5,7 @@ import { PawAvatar, Avatar } from "@/components/Avatar";
 
 export default async function AdminCustomersPage() {
   const session = await getBusinessSession();
-  const customers = listCustomersForBusiness(session!.sub);
+  const customers = await listCustomersForBusiness(session!.sub);
 
   return (
     <div className="max-w-6xl mx-auto px-8 py-8">

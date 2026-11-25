@@ -8,10 +8,11 @@ import { ReservationActionButton } from "@/components/ReservationActionButton";
 
 export default async function AdminDashboardPage() {
   const session = await getBusinessSession();
-  const business = getBusinessById(session!.sub)!;
-  const stats = getBusinessDashboard(business.id);
-  const stays = listStaysByBusiness(business.id);
+  const business = (await getBusinessById(session!.sub))!;
+  const stats = await getBusinessDashboard(business.id);
+  const stays = await listStaysByBusiness(business.id);
   const activeStays = stays.filter((s) => s.status === "CHECKED_IN").length;
+  const taskPets = await Promise.all(stats.todayTasks.map((task) => getPetById(task.petId)));
 
   const todayLabel = formatDateKo(new Date().toISOString());
 
@@ -65,8 +66,8 @@ export default async function AdminDashboardPage() {
 
       <div className="rounded-2xl border border-ink-100 bg-white divide-y divide-ink-100 overflow-hidden">
         {stats.todayTasks.length === 0 && <p className="p-8 text-center text-ink-400 text-sm">처리할 일이 없어요. 오늘도 평온하네요 🐾</p>}
-        {stats.todayTasks.map((task) => {
-          const pet = getPetById(task.petId);
+        {stats.todayTasks.map((task, i) => {
+          const pet = taskPets[i];
           const isPending = task.status === "PENDING_APPROVAL";
           return (
             <div key={task.id} className="flex items-center gap-4 px-5 py-4">
