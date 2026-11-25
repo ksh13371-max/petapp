@@ -6,15 +6,9 @@ import {
   createCustomer,
   createPet,
   createNotice,
-  getOrCreateThread,
-  sendMessage,
   getBusinessByEmail,
 } from "../src/lib/queries";
 import bcrypt from "bcryptjs";
-
-function minutesAgo(min: number) {
-  return new Date(Date.now() - min * 60000).toISOString();
-}
 
 async function main() {
   if (getBusinessByEmail("owner@happydog.com")) {
@@ -69,33 +63,6 @@ async function main() {
 
   const cust5 = createCustomer({ name: "정다인", email: "dain@example.com", passwordHash: pw1, phone: "010-9999-0000" });
   createPet({ customerId: cust5.id, name: "초코", breed: "닥스훈트", weightKg: 6.3, age: 5, avatarColor: "#ded9c7", note: "" });
-
-  // ---- chat threads (no pre-made reservations; dashboard starts at zero) ----
-  const t1 = getOrCreateThread(biz.id, cust1.id);
-  sendMessage(t1.id, "BUSINESS", "안녕하세요! 콩이 예약 확인했어요 😊 원하시는 스타일 사진 있으면 미리 보내주세요.");
-  sendMessage(t1.id, "CUSTOMER", "네! 지난번처럼 얼굴은 동글하게, 몸은 짧게 부탁드려요");
-  sendMessage(t1.id, "BUSINESS", "사진 확인했어요. 발 엉킴이 좀 있어 보이는데 당일 상태 보고 안내드릴게요!");
-  db.prepare(`UPDATE chat_threads SET businessUnread = 0 WHERE id = ?`).run(t1.id);
-
-  const t2 = getOrCreateThread(biz.id, cust2.id);
-  sendMessage(t2.id, "CUSTOMER", "안녕하세요, 보리 가위컷 11/17 15시 예약 가능할까요?");
-  db.prepare(`UPDATE chat_messages SET createdAt = ? WHERE id = (SELECT id FROM chat_messages WHERE threadId = ? ORDER BY createdAt DESC LIMIT 1)`).run(minutesAgo(32), t2.id);
-  db.prepare(`UPDATE chat_threads SET lastMessageAt = ? WHERE id = ?`).run(minutesAgo(32), t2.id);
-
-  const t3 = getOrCreateThread(biz.id, cust3.id);
-  sendMessage(t3.id, "CUSTOMER", "두부 미용 끝나고 사진 좀 보내주실 수 있나요?");
-  db.prepare(`UPDATE chat_messages SET createdAt = ? WHERE id = (SELECT id FROM chat_messages WHERE threadId = ? ORDER BY createdAt DESC LIMIT 1)`).run(minutesAgo(50), t3.id);
-  db.prepare(`UPDATE chat_threads SET lastMessageAt = ? WHERE id = ?`).run(minutesAgo(50), t3.id);
-
-  const t4 = getOrCreateThread(biz.id, cust4.id);
-  sendMessage(t4.id, "CUSTOMER", "오늘 망고 목욕 몇 시쯤 끝날까요?");
-  db.prepare(`UPDATE chat_messages SET createdAt = ? WHERE id = (SELECT id FROM chat_messages WHERE threadId = ? ORDER BY createdAt DESC LIMIT 1)`).run(minutesAgo(70), t4.id);
-  db.prepare(`UPDATE chat_threads SET lastMessageAt = ? WHERE id = ?`).run(minutesAgo(70), t4.id);
-
-  const t5 = getOrCreateThread(biz.id, cust5.id);
-  sendMessage(t5.id, "CUSTOMER", "초코 피부가 예민한 편인데 순한 샴푸 사용하시나요?");
-  db.prepare(`UPDATE chat_messages SET createdAt = ? WHERE id = (SELECT id FROM chat_messages WHERE threadId = ? ORDER BY createdAt DESC LIMIT 1)`).run(minutesAgo(95), t5.id);
-  db.prepare(`UPDATE chat_threads SET lastMessageAt = ? WHERE id = ?`).run(minutesAgo(95), t5.id);
 
   console.log("Seed complete:", { businessId: biz.id, customerLogins: [cust1.email, cust2.email, cust3.email, cust4.email, cust5.email] });
 }
