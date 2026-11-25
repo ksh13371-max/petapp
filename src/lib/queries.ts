@@ -10,6 +10,7 @@ export type Business = {
   phone: string;
   description: string;
   heroColor: string;
+  categories: string;
   openTime: string;
   closeTime: string;
   rating: number;
@@ -102,8 +103,8 @@ export type Notice = { id: string; businessId: string; title: string; body: stri
 export function createBusiness(data: Omit<Business, "id" | "createdAt">): Business {
   const id = newId("biz");
   db.prepare(
-    `INSERT INTO businesses (id, name, email, passwordHash, district, address, phone, description, heroColor, openTime, closeTime, rating, reviewCount)
-     VALUES (@id, @name, @email, @passwordHash, @district, @address, @phone, @description, @heroColor, @openTime, @closeTime, @rating, @reviewCount)`
+    `INSERT INTO businesses (id, name, email, passwordHash, district, address, phone, description, heroColor, categories, openTime, closeTime, rating, reviewCount)
+     VALUES (@id, @name, @email, @passwordHash, @district, @address, @phone, @description, @heroColor, @categories, @openTime, @closeTime, @rating, @reviewCount)`
   ).run({ id, ...data });
   return getBusinessById(id)!;
 }
@@ -118,6 +119,15 @@ export function getBusinessById(id: string): Business | undefined {
 
 export function listBusinesses(): Business[] {
   return db.prepare(`SELECT * FROM businesses ORDER BY createdAt DESC`).all() as Business[];
+}
+
+export function listBusinessesByCategory(categoryCode: string): Business[] {
+  return listBusinesses().filter((b) =>
+    b.categories
+      .split(",")
+      .map((c) => c.trim())
+      .includes(categoryCode)
+  );
 }
 
 export function listServicesByBusiness(businessId: string): ServiceMenu[] {

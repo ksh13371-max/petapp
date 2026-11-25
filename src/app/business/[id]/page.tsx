@@ -5,6 +5,7 @@ import { getBusinessById, listServicesByBusiness, listOptionsByBusiness, listNot
 import { won } from "@/lib/format";
 import { PawAvatar } from "@/components/Avatar";
 import { ChatStartButton } from "@/components/ChatStartButton";
+import { parseCategories, categoryLabel, categoryBadgeStyle } from "@/lib/categories";
 
 const tabs = [
   { key: "home", label: "홈" },
@@ -26,7 +27,8 @@ export default async function BusinessDetailPage({ params, searchParams }: PageP
   const options = listOptionsByBusiness(id);
   const notices = listNoticesByBusiness(id);
   const session = await getCustomerSession();
-  const minPrice = Math.min(...services.map((s) => s.price));
+  const minPrice = services.length > 0 ? Math.min(...services.map((s) => s.price)) : 0;
+  const categories = parseCategories(business.categories);
 
   return (
     <div className="pb-24">
@@ -42,8 +44,11 @@ export default async function BusinessDetailPage({ params, searchParams }: PageP
 
       <div className="px-4 pt-4">
         <div className="flex gap-1.5 mb-2">
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-brand-50 text-brand-600">미용</span>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-400/10 text-purple-600">호텔</span>
+          {categories.map((c) => (
+            <span key={c} className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${categoryBadgeStyle(c)}`}>
+              {categoryLabel(c)}
+            </span>
+          ))}
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-mint-500/10 text-mint-500">영업중</span>
         </div>
         <h1 className="text-xl font-extrabold">{business.name}</h1>

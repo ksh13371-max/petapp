@@ -1,13 +1,21 @@
 import Link from "next/link";
 import { getCustomerSession } from "@/lib/auth";
-import { listBusinesses, listServicesByBusiness, getNextReservationForCustomer } from "@/lib/queries";
+import { listBusinesses, listBusinessesByCategory, listServicesByBusiness, getNextReservationForCustomer } from "@/lib/queries";
 import { formatDateKo, formatTime, reservationStatusLabel } from "@/lib/format";
 import { BusinessCard } from "@/components/BusinessCard";
+import { CATEGORIES, type CategoryCode } from "@/lib/categories";
 
-export default async function CustomerHomePage() {
+export default async function CustomerHomePage({ searchParams }: PageProps<"/">) {
   const session = await getCustomerSession();
-  const businesses = listBusinesses();
+  const { category } = await searchParams;
+  const activeCategory = typeof category === "string" ? (category as CategoryCode) : undefined;
+
+  const businesses = activeCategory ? listBusinessesByCategory(activeCategory) : listBusinesses();
   const nextReservation = session ? getNextReservationForCustomer(session.sub) : undefined;
+
+  const listHeading = activeCategory
+    ? `오늘의 ${CATEGORIES.find((c) => c.code === activeCategory)?.label}`
+    : "오늘의 미용·호텔·유치원";
 
   return (
     <div className="pb-6">
@@ -36,21 +44,26 @@ export default async function CustomerHomePage() {
         </div>
       </div>
 
-      <div className="px-4 grid grid-cols-3 gap-2 mb-6">
-        {[
-          { label: "유치원", emoji: "🏠" },
-          { label: "호텔", emoji: "🛏️" },
-          { label: "미용", emoji: "✂️" },
-        ].map((c) => (
-          <a
-            key={c.label}
-            href="#businesses"
-            className="flex flex-col items-center gap-2 py-3 rounded-2xl bg-ink-50 hover:bg-ink-100 transition"
-          >
-            <span className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-xl shadow-sm">{c.emoji}</span>
-            <span className="text-xs font-bold text-ink-700">{c.label}</span>
-          </a>
-        ))}
+      <div className="px-4 grid grid-cols-4 gap-2 mb-6">
+        {CATEGORIES.map((c) => {
+          const active = activeCategory === c.code;
+          return (
+            <Link
+              key={c.code}
+              href={active ? "/" : `/?category=${c.code}`}
+              className="flex flex-col items-center gap-2 py-3 rounded-2xl transition"
+            >
+              <span
+                className={`w-11 h-11 rounded-full flex items-center justify-center text-xl transition ${
+                  active ? "bg-brand-500 shadow-sm" : "bg-ink-50 shadow-sm"
+                }`}
+              >
+                {c.emoji}
+              </span>
+              <span className={`text-xs font-bold ${active ? "text-brand-600" : "text-ink-700"}`}>{c.label}</span>
+            </Link>
+          );
+        })}
       </div>
 
       <div className="px-4 mb-6">
@@ -98,25 +111,31 @@ export default async function CustomerHomePage() {
       </div>
 
       <div id="businesses" className="px-4">
-        <h2 className="font-extrabold mb-3 text-[15px]">오늘의 미용</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {businesses.map((b) => {
-            const services = listServicesByBusiness(b.id);
-            const minPrice = Math.min(...services.map((s) => s.price));
-            return (
-              <BusinessCard
-                key={b.id}
-                id={b.id}
-                name={b.name}
-                heroColor={b.heroColor}
-                rating={b.rating}
-                reviewCount={b.reviewCount}
-                district={b.district}
-                minPrice={minPrice}
-              />
-            );
-          })}
-        </div>
+        <h2 className="font-extrabold mb-3 text-[15px]">{listHeading}</h2>
+        {businesses.length === 0 ? (
+          <div className="rounded-2xl bg-ink-50 p-8 text-center text-sm text-ink-400">
+            아직 등록된 업체가 없어요.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {businesses.map((b) => {
+              const services = listServicesByBusiness(b.id);
+              const minPrice = services.length > 0 ? Math.min(...services.map((s) => s.price)) : 0;
+              return (
+                <BusinessCard
+                  key={b.id}
+                  id={b.id}
+                  name={b.name}
+                  heroColor={b.heroColor}
+                  rating={b.rating}
+                  reviewCount={b.reviewCount}
+                  district={b.district}
+                  minPrice={minPrice}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

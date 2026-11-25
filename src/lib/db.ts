@@ -56,6 +56,7 @@ export function initSchema() {
       phone TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
       heroColor TEXT NOT NULL DEFAULT '#f4d9c6',
+      categories TEXT NOT NULL DEFAULT 'GROOMING',
       openTime TEXT NOT NULL DEFAULT '10:00',
       closeTime TEXT NOT NULL DEFAULT '19:00',
       rating REAL NOT NULL DEFAULT 4.8,
@@ -170,6 +171,14 @@ export function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_reservations_customer ON reservations(customerId);
     CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(threadId);
   `);
+
+  // Migration for databases created before the `categories` column existed.
+  const hasCategories = (
+    db.prepare(`PRAGMA table_info(businesses)`).all() as { name: string }[]
+  ).some((col) => col.name === "categories");
+  if (!hasCategories) {
+    db.exec(`ALTER TABLE businesses ADD COLUMN categories TEXT NOT NULL DEFAULT 'GROOMING'`);
+  }
 }
 
 initSchema();
